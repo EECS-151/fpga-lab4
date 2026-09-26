@@ -61,27 +61,28 @@ impl: build/impl/$(TOP).bit
 all: build/impl/$(TOP).bit
 
 program: build/impl/$(TOP).bit $(SCRIPTS)/program.tcl
-	@rm -f $(SCRIPTS)/assign_board_test_log.tmp; \
-	assign-fpga-board > $(SCRIPTS)/assign_board_test_log.tmp 2>&1 & \
-	ASSIGN_PID=$$!; \
-	while ! grep -q "Vivado hw_server port:" $(SCRIPTS)/assign_board_test_log.tmp && ! grep -q "already have an instance" $(SCRIPTS)/assign_board_test_log.tmp; do \
-		sleep 0.1; \
-	done; \
-	if grep -q "already have an instance" $(SCRIPTS)/assign_board_test_log.tmp; then \
-		PORT=$$(cat $(SCRIPTS)/port.tmp); \
-		SERIAL=$$(cat $(SCRIPTS)/serial.tmp); \
-	else \
-		sleep infinity | assign-fpga-board > $(SCRIPTS)/assign_board_log.tmp 2>&1 & \
-		while ! grep -q "Vivado hw_server port:" $(SCRIPTS)/assign_board_log.tmp && ! grep -q "already have an instance" $(SCRIPTS)/assign_board_log.tmp; do \
-			sleep 0.1; \
-		done; \
-		PORT=$$(grep -oP 'Vivado hw_server port: \K\d+' $(SCRIPTS)/assign_board_log.tmp); \
-		SERIAL=$$(grep -oP 'serial \K[A-Z0-9]+' $(SCRIPTS)/assign_board_log.tmp); \
-		echo $$PORT > $(SCRIPTS)/port.tmp; \
-		echo $$SERIAL > $(SCRIPTS)/serial.tmp; \
-		/share/instsww/xilinx/2025.2/Vivado/bin/hw_server -stcp:localhost:$$PORT > /dev/null 2>&1 & \
+	@rm -f $(SCRIPTS)/assign_board_log.tmp $(SCRIPTS)/port.tmp $(SCRIPTS)/serial.tmp; \
+	if ! assign-fpga-board > $(SCRIPTS)/assign_board_log.tmp 2>&1 & then \
+		sleep 1; \
 	fi; \
+	if grep -q "already have an instance" $(SCRIPTS)/assign_board_log.tmp; then \
+		PID=$$(grep -oP '\d+' $(SCRIPTS)/assign_board_log.tmp | tail -n 1); \
+		echo "Stale instance found (PID: $$PID). Clearing process tree..."; \
+		SUDO_PID=$$(pstree -p -s $$PID | grep -oP 'sudo\([0-9]+\)' | head -n 1 | grep -oP '\d+'); \
+		if [ -n "$$SUDO_PID" ]; then \
+			kill $$SUDO_PID; \
+			sleep 1; \
+		fi; \
+		assign-fpga-board > $(SCRIPTS)/assign_board_log.tmp 2>&1 & \
+	fi; \
+	echo "Waiting for board assignment..."; \
+	while ! grep -q "Vivado hw_server port:" $(SCRIPTS)/assign_board_log.tmp; do \
+		sleep 0.2; \
+	done; \
+	PORT=$$(grep -oP 'Vivado hw_server port: \K\d+' $(SCRIPTS)/assign_board_log.tmp); \
+	SERIAL=$$(grep -oP 'serial \K[A-Z0-9]+' $(SCRIPTS)/assign_board_log.tmp); \
 	echo "BOARD SERIAL: $$SERIAL"; \
+	/share/instsww/xilinx/2025.2/Vivado/bin/hw_server -stcp:localhost:$$PORT > /dev/null 2>&1 & \
 	cd build/impl && $(VIVADO) $(VIVADO_OPTS) -source $(SCRIPTS)/program.tcl -tclargs $$PORT
 
 program-force:
