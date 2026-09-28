@@ -46,7 +46,6 @@ module uart_transmitter_tb();
 
   // initialize test vectors
   initial begin
-    #0;
     for (c = 0; c < NUM_CHARS; c = c + 1) begin
       chars_from_data_in[c] = CHAR0 + c;
     end
@@ -109,7 +108,6 @@ module uart_transmitter_tb();
   integer num_mismatches = 0;
 
   initial begin
-    #0;
     string fsdb_file;
     if (!$value$plusargs("fsdbfile+%s", fsdb_file)) begin
         fsdb_file = "default.fsdb";
